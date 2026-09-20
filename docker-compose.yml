@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: reyex-postgres
+    environment:
+      POSTGRES_USER: reyex
+      POSTGRES_PASSWORD: reyex
+      POSTGRES_DB: reyex_support
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reyex"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: reyex-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LibreTranslate (for translation feature)
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    container_name: reyex-libretranslate
+    ports:
+      - "5000:5000"
+    environment:
+      LT_HOST: 0.0.0.0
+      LT_PORT: 5000
+      LT_LOAD_ONLY: en,es,fr,de,it,pt,ru,ja,ko,zh
+    volumes:
+      - libretranslate_data:/home/libretranslate/.local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/spec"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Discord Bot
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: reyex-bot
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DATABASE_URL: postgresql://reyex:reyex@postgres:5432/reyex_support
+      REDIS_URL: redis://redis:6379/0
+      LIBRETRANSLATE_URL: http://libretranslate:5000
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      libretranslate:
+        condition: service_healthy
+    volumes:
+      - ./bot:/app/bot
+      - ./scripts:/app/scripts
+    restart: unless-stopped
+
+  # Web API
+  web-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: reyex-web-api
+    environment:
+      DATABASE_URL: postgresql://reyex:reyex@postgres:5432/reyex_support
+      REDIS_URL: redis://redis:6379/0
+      WEB_API_HOST: 0.0.0.0
+      WEB_API_PORT: 8000
+      DISCORD_OAUTH_CLIENT_ID: ${DISCORD_OAUTH_CLIENT_ID}
+      DISCORD_OAUTH_CLIENT_SECRET: ${DISCORD_OAUTH_CLIENT_SECRET}
+      WEB_DASHBOARD_URL: ${WEB_DASHBOARD_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./bot:/app/bot
+      - ./web:/app/web
+      - ./scripts:/app/scripts
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  libretranslate_data:
