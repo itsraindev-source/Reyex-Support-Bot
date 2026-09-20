@@ -1,0 +1,52 @@
+{
+  "bot_name": "Reyex Support",
+  "client_id": "1550588045533773884",
+  "support_role_id": 1549497563688992828,
+  "admin_role_id": null,
+  "ticket_category_id": 1550593434715299901,
+  "transcript_channel_id": 1550594125538263182,
+  "ticket_prefix": "ticket-",
+  "max_open_tickets_per_user": 3,
+  "brand_color": 5793266,
+  "panel_title": "\ud83d\udece\ufe0f Reyex Support",
+  "panel_description": "Welcome to **Reyex Support**!\n\nOur team is here to help with questions, issues and reports. Open a private ticket below and staff will assist you shortly.",
+  "panel_button_label": "Create Ticket",
+  "panel_footer": "Reyex Support \u2022 Average response under 24h \u2022 Please do not DM staff directly",
+  "welcome_message": "Thanks for contacting **Reyex Support**! A staff member will be with you shortly.\n\nPlease describe your issue in detail while you wait \u2014 screenshots and steps to reproduce help a lot.",
+  "log_close": true,
+  "ticket_types": [
+    {
+      "id": "general",
+      "label": "General Support",
+      "emoji": "\ud83d\udcac",
+      "description": "Questions, help & other requests"
+    },
+    {
+      "id": "billing",
+      "label": "Billing",
+      "emoji": "\ud83d\udcb3",
+      "description": "Payments, subscriptions & refunds"
+    },
+    {
+      "id": "technical",
+      "label": "Technical Issue",
+      "emoji": "\ud83d\udee0\ufe0f",
+      "description": "Bugs, errors & troubleshooting"
+    },
+    {
+      "id": "report",
+      "label": "Report a User",
+      "emoji": "\ud83d\udea8",
+      "description": "Report abuse, scams & rule breaks"
+    }
+  ],
+  "priorities": [
+    "Low",
+    "Medium",
+    "High",
+    "Urgent"
+  ],
+  "disabled_ticket_types": [
+    "billing"
+  ]
+}
