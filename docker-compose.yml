@@ -104,6 +104,24 @@ services:
       - ./scripts:/app/scripts
     restart: unless-stopped
 
+  # Web Dashboard Frontend (Next.js)
+  web-frontend:
+    build:
+      context: ./web/frontend
+      dockerfile: Dockerfile
+    container_name: reyex-web-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://web-api:8000
+    depends_on:
+      - web-api
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./web/frontend:/app
+      - /app/node_modules
+      - /app/.next
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   redis_data:
