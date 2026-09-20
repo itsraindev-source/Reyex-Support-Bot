@@ -2,6 +2,7 @@
 Ticket management cog - core ticket functionality.
 """
 
+import asyncio
 import datetime
 import io
 import re
@@ -43,9 +44,9 @@ class TicketsCog(commands.Cog):
                 "You need administrator permissions to use this command.",
                 ephemeral=True
             )
-        
+
         await interaction.response.defer(ephemeral=True, thinking=True)
-        
+
         # Clean up old panels
         cleaned = 0
         try:
@@ -61,13 +62,32 @@ class TicketsCog(commands.Cog):
                         pass
         except Exception as e:
             logger.warning(f"Error cleaning old panels: {e}")
-        
-        # Post new panel
-        from bot.cogs.tickets import TicketPanelView
-        await channel.send(embed=build_panel_embed(interaction.guild), view=TicketPanelView())
-        
-        extra = f" (cleaned {cleaned} old panel(s))" if cleaned else ""
-        await interaction.followup.send(f"✅ Panel posted in {channel.mention}{extra}.", ephemeral=True)
+
+        # Post new panel with retry logic
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await channel.send(embed=build_panel_embed(interaction.guild), view=TicketPanelView())
+                extra = f" (cleaned {cleaned} old panel(s))" if cleaned else ""
+                await interaction.followup.send(f"✅ Panel posted in {channel.mention}{extra}.", ephemeral=True)
+                return
+            except discord.HTTPException as e:
+                if attempt == max_retries - 1:
+                    logger.error(f"Failed to post panel after {max_retries} attempts: {e}")
+                    await interaction.followup.send(
+                        f"❌ Failed to post panel in {channel.mention}. The bot may lack permissions or Discord is experiencing issues.",
+                        ephemeral=True
+                    )
+                else:
+                    logger.warning(f"Panel post attempt {attempt + 1} failed, retrying...")
+                    await asyncio.sleep(1)
+            except Exception as e:
+                logger.error(f"Unexpected error posting panel: {e}")
+                await interaction.followup.send(
+                    f"❌ An error occurred while posting the panel: {str(e)}",
+                    ephemeral=True
+                )
+                return
     
     @app_commands.command(name="close", description="Close this ticket")
     @app_commands.describe(reason="Reason for closing the ticket")

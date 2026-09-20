@@ -963,8 +963,8 @@ def register_commands():
     bot.tree.add_command(_cmd("clearpanels", "Delete old bot panels in a channel (staff)", _clearpanels_cmd))
 
 
-register_commands()
-
+# DISABLED: Legacy bot - use new modular bot in bot/ directory instead
+# register_commands()
 
 if __name__ == "__main__":
     if not TOKEN or TOKEN == "PUT_YOUR_TOKEN_HERE":

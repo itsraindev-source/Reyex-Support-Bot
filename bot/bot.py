@@ -133,11 +133,16 @@ async def load_cogs():
     """Load all bot cogs."""
     # Import cogs here to avoid circular imports
     from bot.cogs import tickets, admin, automation, translation
-    
-    await bot.add_cog(tickets.TicketsCog(bot))
+
+    tickets_cog = tickets.TicketsCog(bot)
+    await bot.add_cog(tickets_cog)
     await bot.add_cog(admin.AdminCog(bot))
     await bot.add_cog(automation.AutomationCog(bot))
     await bot.add_cog(translation.TranslationCog(bot))
+
+    # Register persistent views
+    bot.add_view(tickets.TicketPanelView())
+    bot.add_view(tickets.TicketControlView())
 
 
 async def cleanup():
