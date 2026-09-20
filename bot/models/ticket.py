@@ -106,7 +106,7 @@ class Ticket(Base):
     )
     
     # Additional metadata (JSON for flexibility)
-    metadata: Mapped[dict] = mapped_column(JSON, default=dict)
+    extra_data: Mapped[dict] = mapped_column(JSON, default=dict)
     
     # Relationships
     claimer: Mapped["User"] = relationship("User", back_populates="claimed_tickets", foreign_keys=[claimed_by])
