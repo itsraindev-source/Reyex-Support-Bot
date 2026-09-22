@@ -168,15 +168,18 @@ class AssignmentService:
                 logger.error(f"User {new_staff_id} is not staff, cannot reassign ticket")
                 return False
             
+            # Store current claimer for logging
+            old_claimer = ticket.claimed_by
+            
             # Unassign from current claimer
-            if ticket.claimed_by:
+            if old_claimer:
                 await ticket_repo.unclaim_ticket(ticket)
             
             # Assign to new staff member
             await ticket_repo.claim_ticket(ticket, new_staff_id)
             
             logger.info(
-                f"Reassigned ticket #{ticket.number} from {ticket.claimed_by} to {new_staff_id}. "
+                f"Reassigned ticket #{ticket.number} from {old_claimer} to {new_staff_id}. "
                 f"Reason: {reason}"
             )
             

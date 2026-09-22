@@ -61,6 +61,19 @@ async def on_ready():
         logger.error(f"Failed to load cogs: {e}")
         raise
     
+    # Start background tasks
+    if not auto_close_loop.is_running():
+        auto_close_loop.start()
+        logger.info("Auto-close loop started")
+    
+    if not sla_monitoring_loop.is_running():
+        sla_monitoring_loop.start()
+        logger.info("SLA monitoring loop started")
+    
+    if not auto_assignment_loop.is_running():
+        auto_assignment_loop.start()
+        logger.info("Auto-assignment loop started")
+    
     # Sync slash commands
     try:
         synced = await bot.tree.sync()
@@ -98,6 +111,223 @@ async def on_guild_join(guild: discord.Guild):
 async def on_guild_remove(guild: discord.Guild):
     """Called when the bot leaves a guild."""
     logger.info(f"Left guild: {guild.name} (ID: {guild.id})")
+
+
+@tasks.loop(hours=1)
+async def auto_close_loop():
+    """Background task to auto-close inactive tickets."""
+    await bot.wait_until_ready()
+    
+    import io
+    import datetime
+    from bot.database.connection import get_session
+    from bot.database.repositories.ticket_repository import TicketRepository
+    from bot.database.repositories.guild_repository import GuildRepository
+    from bot.models.ticket import TicketStatus
+    
+    try:
+        async with get_session() as session:
+            ticket_repo = TicketRepository(session)
+            guild_repo = GuildRepository(session)
+            
+            # Get all guilds
+            for guild in bot.guilds:
+                guild_config = await guild_repo.get_guild_config(guild.id)
+                if not guild_config or not guild_config.auto_close_enabled:
+                    continue
+                
+                # Get open tickets with auto_close enabled
+                from sqlalchemy import select, and_
+                from bot.models.ticket import Ticket
+                
+                cutoff_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+                    hours=guild_config.auto_close_hours
+                )
+                
+                query = select(Ticket).where(
+                    and_(
+                        Ticket.guild_id == guild.id,
+                        Ticket.status == TicketStatus.OPEN,
+                        Ticket.auto_close == True,
+                        Ticket.last_activity < cutoff_time
+                    )
+                )
+                
+                result = await session.execute(query)
+                tickets_to_close = list(result.scalars().all())
+                
+                for ticket in tickets_to_close:
+                    try:
+                        channel = guild.get_channel(ticket.channel_id)
+                        if channel:
+                            # Generate transcript
+                            header = (
+                                f"Reyex Support transcript — #{channel.name}\n"
+                                f"Subject: {ticket.subject} | Type: {ticket.ticket_type} | "
+                                f"Priority: {ticket.priority} | Owner: {ticket.owner_id}\n"
+                                f"Exported: {datetime.datetime.now(datetime.timezone.utc).isoformat()}\n"
+                                f"{'=' * 60}\n"
+                            )
+                            lines = [header, "Auto-closed due to inactivity"]
+                            text = "\n".join(lines)
+                            buf = io.BytesIO(text.encode("utf-8"))
+                            transcript_file = discord.File(buf, filename=f"transcript-{channel.name}.txt")
+                            
+                            # Log to transcript channel
+                            if guild_config.transcript_channel_id:
+                                transcript_channel = guild.get_channel(guild_config.transcript_channel_id)
+                                if transcript_channel:
+                                    embed = discord.Embed(
+                                        title=f"⏰ Auto-closed: #{channel.name}",
+                                        description=f"Inactive for {guild_config.auto_close_hours}h.\nOwner: <@{ticket.owner_id}>",
+                                        color=0xFEE75C,
+                                        timestamp=datetime.datetime.now(datetime.timezone.utc),
+                                    )
+                                    await transcript_channel.send(embed=embed, file=transcript_file)
+                            
+                            # Close ticket
+                            await ticket_repo.close_ticket(ticket, resolved=False)
+                            await channel.delete(reason=f"Auto-close: {guild_config.auto_close_hours}h inactivity")
+                            logger.info(f"Auto-closed ticket #{ticket.number} in guild {guild.id}")
+                    except Exception as e:
+                        logger.error(f"Failed to auto-close ticket #{ticket.number}: {e}")
+            
+            await session.commit()
+    except Exception as e:
+        logger.error(f"Error in auto_close_loop: {e}")
+
+
+@tasks.loop(minutes=5)
+async def sla_monitoring_loop():
+    """Background task to monitor SLA compliance and send alerts."""
+    await bot.wait_until_ready()
+    
+    import datetime
+    from bot.database.connection import get_session
+    from bot.database.repositories.ticket_repository import TicketRepository
+    from bot.database.repositories.guild_repository import GuildRepository
+    from bot.services.sla_service import get_sla_service
+    from bot.models.ticket import TicketStatus
+    
+    try:
+        sla_service = get_sla_service()
+        
+        async with get_session() as session:
+            ticket_repo = TicketRepository(session)
+            guild_repo = GuildRepository(session)
+            
+            # Get all guilds
+            for guild in bot.guilds:
+                guild_config = await guild_repo.get_guild_config(guild.id)
+                if not guild_config or not guild_config.enable_automation:
+                    continue
+                
+                # Check SLA compliance
+                breaches = await sla_service.check_sla_compliance(guild.id)
+                
+                # Send alerts for breaches
+                if breaches and guild_config.support_role_id:
+                    support_role = guild.get_role(guild_config.support_role_id)
+                    if support_role:
+                        for breach in breaches:
+                            try:
+                                # Get the ticket to find the channel
+                                ticket = await ticket_repo.get_ticket_by_id(breach["ticket_id"])
+                                if ticket:
+                                    channel = guild.get_channel(ticket.channel_id)
+                                    if channel:
+                                        embed = discord.Embed(
+                                            title="⚠️ SLA Breach Alert",
+                                            description=(
+                                                f"Ticket #{breach['ticket_number']} has breached SLA for {breach['event_type']}\n"
+                                                f"Priority: {breach['priority']}\n"
+                                                f"Target time: {breach['target_time']}"
+                                            ),
+                                            color=0xED4245,
+                                            timestamp=datetime.datetime.now(datetime.timezone.utc),
+                                        )
+                                        await channel.send(content=f"{support_role.mention}", embed=embed)
+                                        logger.info(f"SLA breach alert sent for ticket #{breach['ticket_number']}")
+                            except Exception as e:
+                                logger.error(f"Failed to send SLA breach alert: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error in sla_monitoring_loop: {e}")
+
+
+@tasks.loop(minutes=2)
+async def auto_assignment_loop():
+    """Background task to auto-assign unclaimed tickets."""
+    await bot.wait_until_ready()
+    
+    from bot.database.connection import get_session
+    from bot.database.repositories.ticket_repository import TicketRepository
+    from bot.database.repositories.guild_repository import GuildRepository
+    from bot.services.assignment_service import get_assignment_service
+    from bot.models.ticket import TicketStatus
+    
+    try:
+        assignment_service = get_assignment_service()
+        
+        async with get_session() as session:
+            ticket_repo = TicketRepository(session)
+            guild_repo = GuildRepository(session)
+            
+            # Get all guilds
+            for guild in bot.guilds:
+                guild_config = await guild_repo.get_guild_config(guild.id)
+                if not guild_config or not guild_config.enable_auto_assignment:
+                    continue
+                
+                # Get unclaimed tickets
+                from sqlalchemy import select, and_
+                from bot.models.ticket import Ticket
+                
+                query = select(Ticket).where(
+                    and_(
+                        Ticket.guild_id == guild.id,
+                        Ticket.status == TicketStatus.OPEN,
+                        Ticket.claimed_by.is_(None)
+                    )
+                ).order_by(Ticket.created_at.asc())
+                
+                result = await session.execute(query)
+                unclaimed_tickets = list(result.scalars().all())
+                
+                for ticket in unclaimed_tickets:
+                    try:
+                        # Auto-assign the ticket
+                        staff_id = await assignment_service.auto_assign_ticket(
+                            ticket,
+                            strategy=guild_config.auto_assignment_strategy,
+                            specialization=ticket.ticket_type
+                        )
+                        
+                        if staff_id:
+                            # Refresh ticket embed
+                            channel = guild.get_channel(ticket.channel_id)
+                            if channel:
+                                cog = bot.get_cog("TicketsCog")
+                                if cog:
+                                    await cog._refresh_ticket_embed(channel, ticket)
+                            
+                            # Notify staff
+                            staff_member = guild.get_member(staff_id)
+                            if staff_member:
+                                try:
+                                    await staff_member.send(
+                                        f"🎫 You've been auto-assigned ticket #{ticket.number}: {ticket.subject}"
+                                    )
+                                except Exception:
+                                    pass
+                            
+                            logger.info(f"Auto-assigned ticket #{ticket.number} to {staff_id}")
+                    
+                    except Exception as e:
+                        logger.error(f"Failed to auto-assign ticket #{ticket.number}: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error in auto_assignment_loop: {e}")
 
 
 @bot.event

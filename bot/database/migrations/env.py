@@ -11,7 +11,7 @@ from bot.database.connection import Base, get_engine
 from bot.config import get_settings
 
 # Import all models to ensure they're registered with SQLAlchemy
-from bot.models import ticket, user, automation  # noqa: F401
+from bot.models import ticket, user, guild, automation  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config

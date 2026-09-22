@@ -2,11 +2,13 @@
 Translation service using LibreTranslate API.
 """
 
+import hashlib
 import httpx
 from typing import Optional, Dict
 
 from bot.config import get_settings
 from bot.database.connection import get_session
+from bot.database.redis_client import get_redis_client
 from bot.database.repositories.user_repository import UserRepository
 from bot.utils.logger import get_logger
 
@@ -34,6 +36,7 @@ class TranslationService:
             "zh": "Chinese",
         }
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._cache_ttl = 3600  # Cache translations for 1 hour
     
     def get_http_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client."""
@@ -102,6 +105,13 @@ class TranslationService:
             logger.warning(f"Unsupported target language: {target_language}")
             return None
         
+        # Check cache first
+        cache_key = self._get_cache_key(text, target_language, source_language)
+        cached = await self._get_from_cache(cache_key)
+        if cached:
+            logger.debug(f"Cache hit for translation: {text[:50]}...")
+            return cached
+        
         try:
             client = self.get_http_client()
             
@@ -127,6 +137,8 @@ class TranslationService:
                         f"Translated text from {source_language or 'auto'} to {target_language}: "
                         f"{text[:50]}... -> {translated[:50]}..."
                     )
+                    # Cache the result
+                    await self._set_cache(cache_key, translated)
                     return translated
             
             logger.warning(f"Translation failed: {response.status_code}")
@@ -135,6 +147,30 @@ class TranslationService:
         except Exception as e:
             logger.error(f"Error translating text: {e}")
             return None
+    
+    def _get_cache_key(self, text: str, target_language: str, source_language: Optional[str] = None) -> str:
+        """Generate a cache key for translation."""
+        content = f"{text}:{target_language}:{source_language or 'auto'}"
+        return f"translation:{hashlib.md5(content.encode()).hexdigest()}"
+    
+    async def _get_from_cache(self, key: str) -> Optional[str]:
+        """Get translation from Redis cache."""
+        try:
+            redis_client = get_redis_client()
+            cached = await redis_client.get(key)
+            if cached:
+                return cached.decode("utf-8")
+        except Exception as e:
+            logger.warning(f"Failed to get from cache: {e}")
+        return None
+    
+    async def _set_cache(self, key: str, value: str):
+        """Set translation in Redis cache."""
+        try:
+            redis_client = get_redis_client()
+            await redis_client.setex(key, self._cache_ttl, value)
+        except Exception as e:
+            logger.warning(f"Failed to set cache: {e}")
     
     async def translate_for_user(
         self,

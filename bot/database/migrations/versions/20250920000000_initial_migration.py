@@ -44,6 +44,30 @@ def upgrade() -> None:
     op.create_index('ix_users_id', 'users', ['id'], unique=True)
     op.create_index('ix_users_is_staff', 'users', ['is_staff'])
 
+    # Create guild_configs table
+    op.create_table(
+        'guild_configs',
+        sa.Column('id', sa.Integer(), primary_key=True),
+        sa.Column('name', sa.String(100), nullable=True),
+        sa.Column('support_role_id', sa.Integer(), nullable=True),
+        sa.Column('admin_role_id', sa.Integer(), nullable=True),
+        sa.Column('ticket_category_id', sa.Integer(), nullable=True),
+        sa.Column('transcript_channel_id', sa.Integer(), nullable=True),
+        sa.Column('max_open_tickets_per_user', sa.Integer(), default=3),
+        sa.Column('ticket_prefix', sa.String(20), default='ticket-'),
+        sa.Column('enable_translation', sa.Boolean(), default=True),
+        sa.Column('enable_automation', sa.Boolean(), default=True),
+        sa.Column('enable_auto_assignment', sa.Boolean(), default=False),
+        sa.Column('auto_assignment_strategy', sa.String(50), default='round_robin'),
+        sa.Column('auto_close_enabled', sa.Boolean(), default=False),
+        sa.Column('auto_close_hours', sa.Integer(), default=24),
+        sa.Column('ticket_types', sa.JSON(), default=dict),
+        sa.Column('disabled_ticket_types', sa.JSON(), default=list),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+    )
+    op.create_index('ix_guild_configs_id', 'guild_configs', ['id'])
+
     # Create tickets table
     op.create_table(
         'tickets',

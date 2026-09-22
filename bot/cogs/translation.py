@@ -41,8 +41,9 @@ class TranslationCog(commands.Cog):
             user = await user_repo.get_or_create_user(
                 interaction.user.id,
                 interaction.user.name,
-                interaction.user.discriminator,
+                str(interaction.user.discriminator),
                 interaction.user.global_name,
+                str(interaction.user.avatar) if interaction.user.avatar else None
             )
             await user_repo.set_language_preference(user, language)
         
@@ -62,8 +63,9 @@ class TranslationCog(commands.Cog):
             user = await user_repo.get_or_create_user(
                 interaction.user.id,
                 interaction.user.name,
-                interaction.user.discriminator,
+                str(interaction.user.discriminator),
                 interaction.user.global_name,
+                str(interaction.user.avatar) if interaction.user.avatar else None
             )
             user.auto_translate = enabled
             await user_repo.update_user(user)

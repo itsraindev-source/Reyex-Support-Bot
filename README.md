@@ -10,10 +10,13 @@ A production-ready Discord support bot with enterprise-grade features, modern ar
 - **Priority System**: Track ticket priority (Low, Medium, High, Urgent)
 - **Transcript Generation**: Automatic transcript creation on ticket close
 - **User Management**: Add/remove users from tickets
+- **Message History**: Full message tracking and analytics
+- **Auto-Close**: Automatic ticket closure after inactivity
 
 ### Automation Features
 - **SLA Monitoring**: Track response and resolution times with breach detection
 - **Auto-Assignment**: Multiple strategies (round-robin, least-loaded, specialization-based)
+- **Staff Specialization**: Assign tickets based on staff expertise
 - **Escalation Rules**: Automatic ticket escalation based on conditions
 - **Canned Responses**: Pre-written response templates for staff
 
@@ -21,12 +24,15 @@ A production-ready Discord support bot with enterprise-grade features, modern ar
 - **Auto-Translation**: Real-time message translation using LibreTranslate
 - **Language Preferences**: Per-user language settings
 - **Multi-language Support**: Support for 10+ languages
+- **Translation Caching**: Redis caching for improved performance
 
 ### Web Dashboard
 - **Real-time Analytics**: Live ticket statistics and metrics
 - **Staff Performance**: Track response times and resolution rates
-- **Ticket Management**: View and manage tickets from web interface
-- **SLA Reports**: Compliance monitoring and breach alerts
+- **SLA Compliance**: Monitor SLA adherence and breach alerts
+- **Ticket Trends**: Visual analytics with time-series data
+- **Priority Distribution**: Breakdown by ticket priority
+- **Hourly Activity**: Peak time analysis
 
 ## 🏗️ Architecture
 
@@ -43,15 +49,34 @@ A production-ready Discord support bot with enterprise-grade features, modern ar
 reyex-support/
 ├── bot/                  # Core bot functionality
 │   ├── cogs/            # Discord command modules
+│   │   ├── tickets.py   # Ticket management
+│   │   ├── admin.py     # Admin commands
+│   │   ├── automation.py # Automation features
+│   │   └── translation.py # Translation features
 │   ├── models/          # Database models
+│   │   ├── ticket.py    # Ticket, TicketMessage, SLAEvent
+│   │   ├── user.py      # User model
+│   │   ├── guild.py     # Guild configuration
+│   │   └── automation.py # Automation models
 │   ├── services/        # Business logic
+│   │   ├── sla_service.py
+│   │   ├── assignment_service.py
+│   │   └── translation_service.py
 │   ├── database/        # Database setup
+│   │   ├── connection.py
+│   │   ├── redis_client.py
+│   │   ├── repositories/
+│   │   └── migrations/
 │   └── utils/           # Utilities
 ├── web/                 # Web dashboard
 │   ├── api/             # FastAPI backend
+│   │   └── main.py
 │   └── frontend/       # Next.js frontend
+│       └── src/app/
 ├── docker/              # Docker configuration
-└── scripts/             # Utility scripts
+├── tests/               # Test suite
+└── archive/             # Legacy code
+    └── legacy_bot.py   # Original monolithic bot
 ```
 
 ## 📋 Prerequisites
@@ -128,8 +153,21 @@ docker-compose down
    - Read Message History
    - Mention Everyone
 
+### Initial Bot Configuration
+
+1. Start the bot
+2. In your Discord server, run:
+   ```
+   /setup support_role:@SupportRole category:#Tickets transcript_channel:#Transcripts
+   ```
+3. Post the support panel:
+   ```
+   /panel #support-channel
+   ```
+
 ### Bot Commands
 
+**Ticket Commands:**
 - `/panel` - Post the support panel (admin only)
 - `/setup` - Configure support role/category/transcripts (admin)
 - `/close [reason]` - Close current ticket
@@ -138,10 +176,22 @@ docker-compose down
 - `/add @user` - Add user to ticket
 - `/remove @user` - Remove user from ticket (staff)
 - `/priority <level>` - Set ticket priority (staff)
+- `/lock` - Lock ticket read-only (staff)
+- `/unlock` - Unlock ticket (staff)
+- `/rename <suffix>` - Rename ticket (staff)
+- `/note <text>` - Post a staff note
 - `/transcript` - Get ticket transcript
+- `/stats` - Support statistics (staff)
+
+**Admin Commands:**
+- `/autoassign enable/disable` - Configure auto-assignment
+- `/staff @member [specialization]` - Configure staff members
+
+**Translation Commands:**
 - `/language <code>` - Set language preference
-- `/autotranslate <enabled>` - Enable/disable auto-translation
+- `/autotranslate enable/disable` - Enable/disable auto-translation
 - `/translate <text> <language>` - Manual translation
+- `/languages` - List supported languages
 
 ## 🌐 Web Dashboard
 
@@ -164,10 +214,9 @@ npm run dev
 ### Dashboard Features
 
 - **Overview**: Real-time statistics and metrics
-- **Tickets**: View and filter tickets by status/priority
-- **Staff**: View staff performance and assignments
-- **SLA**: Monitor compliance and breach alerts
-- **Settings**: Configure bot settings and rules
+- **SLA Compliance**: Monitor SLA adherence and breach alerts
+- **Staff Performance**: Track response times and resolution rates
+- **Analytics**: Ticket trends, priority distribution, hourly activity
 
 ## 🔧 Configuration
 
@@ -177,8 +226,6 @@ npm run dev
 # Discord Configuration
 DISCORD_TOKEN=your_discord_bot_token
 DISCORD_CLIENT_ID=your_discord_client_id
-SUPPORT_ROLE_ID=support_role_id
-ADMIN_ROLE_ID=admin_role_id
 
 # Database Configuration
 DATABASE_URL=postgresql://user:password@localhost:5432/reyex_support
