@@ -1043,31 +1043,30 @@ class TicketsCog(commands.Cog):
                 if msg.author.id == self.bot.user.id and msg.embeds:
                     embed = msg.embeds[0]
                     if embed.title and "Ticket #" in embed.title:
-                        # Update the embed
+                        # Update the embed with new format
                         owner = channel.guild.get_member(ticket.owner_id)
                         if not owner:
                             return
                         
-                        priority_dot = {"Low": "🟢", "Medium": "⚪", "High": "🟡", "Urgent": "🔴"}.get(ticket.priority, "⚪")
-                        status_line = "`STATUS` 🔒 Claimed" if ticket.claimed_by else "`STATUS` 🎫 Open"
-                        agent_line = f"`AGENT` <@{ticket.claimed_by}>" if ticket.claimed_by else "`AGENT` _Unclaimed_"
+                        # Get ticket type info
+                        from bot.utils.embeds import build_welcome_embed
+                        ticket_type = {"id": ticket.ticket_type, "label": ticket.ticket_type.title(), "emoji": "🎫"}
                         
-                        new_embed = discord.Embed(
-                            title=embed.title,
-                            description=(
-                                f"{ticket.subject} · Reyex Support\n"
-                                f"{DIVIDER}\n"
-                                f"{status_line}\n"
-                                f"`OPENED BY` {owner.mention}\n"
-                                f"{agent_line}\n"
-                                f"`PRIORITY` {priority_dot} {ticket.priority}\n"
-                                f"`AUTO-CLOSE` {'ON' if ticket.auto_close else 'Off for this ticket'}\n"
-                                f"{DIVIDER}\n"
-                                "Tell us what happened in your own words — paste the exact error text "
-                                "and drop **screenshots** if you have them. Support replies right here.\n\n"
-                                "Need a person instead? Hit **Talk to a staff member** and automated replies stop immediately."
-                            ),
-                            color=self.brand_color,
+                        # Build info dict
+                        info = {
+                            "claimed_by": ticket.claimed_by,
+                            "auto_close": ticket.auto_close,
+                            "locked": ticket.locked,
+                        }
+                        
+                        new_embed = build_welcome_embed(
+                            ticket.number,
+                            ticket_type,
+                            ticket.subject,
+                            ticket.description or "",
+                            owner,
+                            ticket.priority,
+                            info
                         )
                         
                         await msg.edit(embed=new_embed)
@@ -1207,10 +1206,11 @@ class TicketCreateModal(discord.ui.Modal):
 
 
 class TicketControlView(discord.ui.View):
-    """View for ticket control buttons."""
+    """View for ticket control buttons with optimized layout."""
     
     def __init__(self, priority: str = "Medium"):
         super().__init__(timeout=None)
+        # Row 3: Priority select (its own row)
         self.add_item(PrioritySelect(priority))
     
     @discord.ui.button(label="Talk to a staff member", style=discord.ButtonStyle.success,
@@ -1267,8 +1267,8 @@ class TicketControlView(discord.ui.View):
         """Handle close button."""
         await interaction.response.send_modal(CloseReasonModal())
     
-    @discord.ui.button(label="Auto-close", style=discord.ButtonStyle.primary,
-                       custom_id="reyex:auto_close", row=1)
+    @discord.ui.button(label="Auto-close", style=discord.ButtonStyle.secondary,
+                       custom_id="reyex:auto_close", row=2)
     async def auto_close(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle auto-close toggle."""
         if not is_staff(interaction.user):
@@ -1299,7 +1299,7 @@ class TicketControlView(discord.ui.View):
             logger.info(f"Auto-close set to {ticket.auto_close} for ticket #{ticket.number} by {interaction.user.id}")
     
     @discord.ui.button(label="Transcript", style=discord.ButtonStyle.secondary,
-                       custom_id="reyex:transcript", emoji="📝", row=1)
+                       custom_id="reyex:transcript", emoji="📝", row=2)
     async def transcript(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Handle transcript button."""
         cog = interaction.client.get_cog("TicketsCog")
@@ -1312,7 +1312,7 @@ class PrioritySelect(discord.ui.Select):
     
     def __init__(self, current: str = "Medium"):
         priorities = ["Low", "Medium", "High", "Urgent"]
-        emoji_map = {"Low": "🟢", "Medium": "⚪", "High": "🟡", "Urgent": "🔴"}
+        emoji_map = {"Low": "🟢", "Medium": "🟡", "High": "🟡", "Urgent": "🔴"}
         
         options = [
             discord.SelectOption(
@@ -1329,7 +1329,8 @@ class PrioritySelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="reyex:priority_select"
+            custom_id="reyex:priority_select",
+            row=3
         )
     
     async def callback(self, interaction: discord.Interaction):
@@ -1357,7 +1358,7 @@ class PrioritySelect(discord.ui.Select):
             if cog:
                 await cog._refresh_ticket_embed(interaction.channel, ticket)
             
-            priority_emoji = {"Low": "🟢", "Medium": "⚪", "High": "🟡", "Urgent": "🔴"}.get(self.values[0], "")
+            priority_emoji = {"Low": "🟢", "Medium": "🟡", "High": "🟡", "Urgent": "🔴"}.get(self.values[0], "")
             await interaction.response.send_message(
                 f"{priority_emoji} Priority → **{self.values[0]}**",
                 ephemeral=True

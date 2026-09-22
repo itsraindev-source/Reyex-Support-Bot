@@ -51,30 +51,67 @@ def build_welcome_embed(
 ) -> discord.Embed:
     """Build the welcome embed for a new ticket."""
     info = info or {}
-    auto = "ON" if info.get("auto_close") else "Off for this ticket"
     
-    status_line = "`STATUS` 🔒 Claimed" if info.get("claimed_by") else "`STATUS` 🎫 Open"
-    agent_line = f"`AGENT` <@{info.get('claimed_by')}>" if info.get("claimed_by") else "`AGENT` _Unclaimed_"
+    # Dynamic color based on priority and status
+    is_claimed = info.get("claimed_by")
+    priority_colors = {
+        "Low": 0x57F287,      # Green
+        "Medium": 0xFEE75C,    # Yellow
+        "High": 0xED4245,     # Red
+        "Urgent": 0xED4245,    # Red
+    }
+    status_colors = {
+        "open": 0x5865F2,      # Blurple
+        "claimed": 0xFEE75C,  # Yellow
+        "locked": 0xED4245,   # Red
+        "resolved": 0x57F287, # Green
+    }
     
-    priority_dot = {"Low": "🟢", "Medium": "⚪", "High": "🟡", "Urgent": "🔴"}.get(priority, "⚪")
+    if info.get("locked"):
+        embed_color = status_colors["locked"]
+    elif is_claimed:
+        embed_color = status_colors["claimed"]
+    else:
+        embed_color = priority_colors.get(priority, status_colors["open"])
     
+    # Ticket type emoji and icon
+    type_emoji = ticket_type.get("emoji", "🎫")
+    type_label = ticket_type.get("label", "Support")
+    
+    # Build embed
     embed = discord.Embed(
-        title=f"◆ Ticket #{number:04d}",
+        title=subject,
         description=(
-            f"{subject} · Reyex Support\n"
-            f"{DIVIDER}\n"
-            f"{status_line}\n"
-            f"`OPENED BY` {owner.mention}\n"
-            f"{agent_line}\n"
-            f"`PRIORITY` {priority_dot} {priority}\n"
-            f"`AUTO-CLOSE` {auto}\n"
-            f"{DIVIDER}\n"
-            "Tell us what happened in your own words — paste the exact error text "
+            f"Tell us what happened in your own words — paste the exact error text "
             "and drop **screenshots** if you have them. Support replies right here.\n\n"
             "Need a person instead? Hit **Talk to a staff member** and automated replies stop immediately."
         ),
-        color=BRAND_COLOR,
+        color=embed_color,
     )
+    
+    # Author line with ticket number and category
+    embed.set_author(
+        name=f"#{number:04d} · {type_emoji} {type_label}",
+        icon_url=owner.display_avatar.url if owner.display_avatar else None
+    )
+    
+    # Embed fields with clean formatting
+    status_emoji = "🔒" if is_claimed else "🎫"
+    status_text = "Claimed" if is_claimed else "Open"
+    
+    agent_name = f"<@{info.get('claimed_by')}>" if is_claimed else "_Unclaimed_"
+    
+    priority_emoji = {"Low": "🟢", "Medium": "🟡", "High": "🟡", "Urgent": "🔴"}.get(priority, "⚪")
+    
+    auto_status = "ON" if info.get("auto_close") else "Off"
+    
+    embed.add_field(name="Status", value=f"{status_emoji} {status_text}", inline=True)
+    embed.add_field(name="Agent", value=agent_name, inline=True)
+    embed.add_field(name="Priority", value=f"{priority_emoji} {priority}", inline=True)
+    embed.add_field(name="Auto-Close", value=auto_status, inline=True)
+    embed.add_field(name="Opened By", value=owner.mention, inline=False)
+    
+    embed.set_footer(text="Reyex Support")
     
     return embed
 
