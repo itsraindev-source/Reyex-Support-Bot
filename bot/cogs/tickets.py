@@ -628,7 +628,7 @@ class TicketsCog(commands.Cog):
             
             # Send welcome message
             from bot.cogs.tickets import TicketControlView
-            embed = build_welcome_embed(
+            embed, card_file = build_welcome_embed(
                 number=number,
                 ticket_type={"id": ticket_type, "label": ticket_type.title(), "emoji": "🎫"},
                 subject=subject,
@@ -645,6 +645,7 @@ class TicketsCog(commands.Cog):
             await channel.send(
                 content=f"{interaction.user.mention} {ping}".strip(),
                 embed=embed,
+                file=card_file,
                 view=TicketControlView("Medium")
             )
             
@@ -1042,7 +1043,7 @@ class TicketsCog(commands.Cog):
             async for msg in channel.history(limit=10):
                 if msg.author.id == self.bot.user.id and msg.embeds:
                     embed = msg.embeds[0]
-                    if embed.title and "Ticket #" in embed.title:
+                    if embed.image:  # Check if it has an image (our card)
                         # Update the embed with new format
                         owner = channel.guild.get_member(ticket.owner_id)
                         if not owner:
@@ -1059,7 +1060,7 @@ class TicketsCog(commands.Cog):
                             "locked": ticket.locked,
                         }
                         
-                        new_embed = build_welcome_embed(
+                        new_embed, card_file = build_welcome_embed(
                             ticket.number,
                             ticket_type,
                             ticket.subject,
@@ -1069,7 +1070,8 @@ class TicketsCog(commands.Cog):
                             info
                         )
                         
-                        await msg.edit(embed=new_embed)
+                        # Edit message with new embed and file
+                        await msg.edit(embed=new_embed, attachments=[card_file])
                         break
         except Exception as e:
             logger.error(f"Failed to refresh ticket embed: {e}")

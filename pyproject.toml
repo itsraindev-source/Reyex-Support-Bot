@@ -59,6 +59,7 @@ dependencies = [
     # Utilities
     "aiofiles>=23.2.0",
     "orjson>=3.9.0",
+    "Pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]

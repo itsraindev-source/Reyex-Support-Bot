@@ -3,11 +3,13 @@ Embed builders for Discord messages.
 """
 
 import datetime
+import io
 from typing import Optional
 
 import discord
 
 from bot.config import get_settings
+from bot.utils.ticket_card import create_ticket_card_bytes
 
 settings = get_settings()
 BRAND_COLOR = settings.brand_color
@@ -48,72 +50,55 @@ def build_welcome_embed(
     owner: discord.Member,
     priority: str = "Medium",
     info: Optional[dict] = None
-) -> discord.Embed:
-    """Build the welcome embed for a new ticket."""
+) -> tuple[discord.Embed, discord.File]:
+    """Build the welcome embed for a new ticket with branded card image.
+    
+    Returns:
+        Tuple of (embed, file) where file is the ticket card image
+    """
     info = info or {}
     
-    # Dynamic color based on priority and status
+    # Determine status for the card
     is_claimed = info.get("claimed_by")
-    priority_colors = {
-        "Low": 0x57F287,      # Green
-        "Medium": 0xFEE75C,    # Yellow
-        "High": 0xED4245,     # Red
-        "Urgent": 0xED4245,    # Red
-    }
-    status_colors = {
-        "open": 0x5865F2,      # Blurple
-        "claimed": 0xFEE75C,  # Yellow
-        "locked": 0xED4245,   # Red
-        "resolved": 0x57F287, # Green
-    }
-    
     if info.get("locked"):
-        embed_color = status_colors["locked"]
+        status = "locked"
     elif is_claimed:
-        embed_color = status_colors["claimed"]
+        status = "claimed"
     else:
-        embed_color = priority_colors.get(priority, status_colors["open"])
+        status = "open"
     
-    # Ticket type emoji and icon
-    type_emoji = ticket_type.get("emoji", "🎫")
+    # Generate ticket card image
     type_label = ticket_type.get("label", "Support")
+    card_bytes = create_ticket_card_bytes(
+        ticket_number=number,
+        subject=subject,
+        status=status,
+        priority=priority,
+        owner_name=owner.display_name,
+        ticket_type=type_label,
+        use_cache=True,
+    )
     
-    # Build embed
+    # Create Discord file from bytes
+    file = discord.File(
+        fp=io.BytesIO(card_bytes),
+        filename=f"ticket_{number}.png"
+    )
+    
+    # Build minimal embed with card image
     embed = discord.Embed(
-        title=subject,
         description=(
             f"Tell us what happened in your own words — paste the exact error text "
             "and drop **screenshots** if you have them. Support replies right here.\n\n"
             "Need a person instead? Hit **Talk to a staff member** and automated replies stop immediately."
         ),
-        color=embed_color,
+        color=0x2d2d2d,  # Dark gray to match card
     )
     
-    # Author line with ticket number and category
-    embed.set_author(
-        name=f"#{number:04d} · {type_emoji} {type_label}",
-        icon_url=owner.display_avatar.url if owner.display_avatar else None
-    )
-    
-    # Embed fields with clean formatting
-    status_emoji = "🔒" if is_claimed else "🎫"
-    status_text = "Claimed" if is_claimed else "Open"
-    
-    agent_name = f"<@{info.get('claimed_by')}>" if is_claimed else "_Unclaimed_"
-    
-    priority_emoji = {"Low": "🟢", "Medium": "🟡", "High": "🟡", "Urgent": "🔴"}.get(priority, "⚪")
-    
-    auto_status = "ON" if info.get("auto_close") else "Off"
-    
-    embed.add_field(name="Status", value=f"{status_emoji} {status_text}", inline=True)
-    embed.add_field(name="Agent", value=agent_name, inline=True)
-    embed.add_field(name="Priority", value=f"{priority_emoji} {priority}", inline=True)
-    embed.add_field(name="Auto-Close", value=auto_status, inline=True)
-    embed.add_field(name="Opened By", value=owner.mention, inline=False)
-    
+    embed.set_image(url=f"attachment://ticket_{number}.png")
     embed.set_footer(text="Reyex Support")
     
-    return embed
+    return embed, file
 
 
 def build_error_embed(title: str, message: str) -> discord.Embed:
